@@ -1,12 +1,20 @@
 import { JWT } from "google-auth-library";
 import * as fs from "fs";
 
-// Chat scopes. Read-only for spaces/messages/memberships plus reactions read+write.
-// The service account must be configured as a Chat App in Google Cloud and added
-// to spaces in Google Chat — those are the outer trust gates. The per-agent
-// allowlist (MGR_ALLOWED_SPACE_IDS) is the inner one and gates BOTH reads and
-// reactions: if a space isn't readable to the agent, it isn't reactable either.
+// Chat scopes. We request the broad `chat.bot` scope (the canonical app-auth
+// scope for Chat Apps) PLUS the granular ones. Reason: many Chat API methods
+// — notably spaces.messages.list — historically reject the granular readonly
+// scopes when the caller authenticates as a Chat App (especially apps deployed
+// as Workspace add-ons). The granular ones still help with future-proofing and
+// document the actual capability surface.
+//
+// The service account must be configured as a Chat App in Google Cloud and
+// added to spaces in Google Chat — those are the outer trust gates. The
+// per-agent allowlist (MGR_ALLOWED_SPACE_IDS) is the inner one and gates BOTH
+// reads and reactions: if a space isn't readable to the agent, it isn't
+// reactable either.
 export const SCOPES = [
+  "https://www.googleapis.com/auth/chat.bot",
   "https://www.googleapis.com/auth/chat.spaces.readonly",
   "https://www.googleapis.com/auth/chat.messages.readonly",
   "https://www.googleapis.com/auth/chat.memberships.readonly",

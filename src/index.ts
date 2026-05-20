@@ -41,7 +41,7 @@ Environment:
 
   const server = new McpServer({
     name: "google-chat-mcp",
-    version: "1.1.0",
+    version: "1.1.1",
   });
 
   server.registerTool(
