@@ -41,7 +41,7 @@ Environment:
 
   const server = new McpServer({
     name: "google-chat-mcp",
-    version: "1.1.1",
+    version: "1.1.2",
   });
 
   server.registerTool(
@@ -203,7 +203,10 @@ Environment:
           ],
         };
       } catch (error) {
-        return { content: [{ type: "text", text: client.handleApiError(error) }], isError: true };
+        return {
+          content: [{ type: "text", text: client.handleApiError(error, { operation: "reaction_add" }) }],
+          isError: true,
+        };
       }
     },
   );
@@ -239,7 +242,10 @@ Environment:
           ],
         };
       } catch (error) {
-        return { content: [{ type: "text", text: client.handleApiError(error) }], isError: true };
+        return {
+          content: [{ type: "text", text: client.handleApiError(error, { operation: "reaction_remove" }) }],
+          isError: true,
+        };
       }
     },
   );
@@ -283,7 +289,10 @@ Environment:
           ],
         };
       } catch (error) {
-        return { content: [{ type: "text", text: client.handleApiError(error) }], isError: true };
+        return {
+          content: [{ type: "text", text: client.handleApiError(error, { operation: "reaction_list" }) }],
+          isError: true,
+        };
       }
     },
   );

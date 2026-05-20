@@ -10,15 +10,35 @@ export async function getChatClient(): Promise<chat_v1.Chat> {
   return chatClient;
 }
 
-export function handleApiError(error: unknown): string {
+export function handleApiError(error: unknown, context?: { operation?: string }): string {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
     if (message.includes("allowlist")) return `Error: ${error.message}`;
+
+    // Reaction methods require user authentication — there's no chat.app.*
+    // scope for them. Surface this clearly so the agent doesn't keep retrying.
+    if (context?.operation?.startsWith("reaction")) {
+      if (message.includes("scope") || message.includes("403") || message.includes("forbidden")) {
+        return (
+          "Error: Google Chat reactions require user authentication, which is not configured. " +
+          "App-authenticated Chat Apps (service accounts) can read messages but cannot add/remove reactions. " +
+          "Ask the agent owner to either skip reaction calls or configure domain-wide delegation."
+        );
+      }
+    }
+
+    if (message.includes("insufficient authentication scopes") || message.includes("does not have the necessary scope")) {
+      return (
+        "Error: The Chat App is missing OAuth scopes that need admin approval. " +
+        "Ask a Workspace admin to install/approve the app at admin.google.com → " +
+        "Apps → Google Workspace Marketplace apps → Install app (Admin install)."
+      );
+    }
     if (message.includes("401") || message.includes("unauthorized")) {
       return "Error: Authentication failed. The Chat App may be misconfigured in Google Cloud.";
     }
     if (message.includes("403") || message.includes("forbidden")) {
-      return "Error: Permission denied. The bot may not have been added to this space yet.";
+      return "Error: Permission denied. The bot may not have been added to this space, or the scope requires admin approval.";
     }
     if (message.includes("404") || message.includes("not found")) {
       return "Error: Not found. The space or message may have been deleted, or the bot was removed.";
