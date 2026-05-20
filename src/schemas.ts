@@ -61,3 +61,61 @@ export type ListMembersInput = {
   page_token?: string;
   response_format?: "markdown" | "json";
 };
+
+// Unicode emoji constraint: at least one codepoint, reasonable upper bound.
+// We don't try to parse "is this a real emoji" — the Chat API rejects bad ones.
+const EmojiSchema = z
+  .string()
+  .min(1)
+  .max(32)
+  .describe('A single Unicode emoji (e.g. "👍", "✅", "🔥"). Custom org emojis are not supported.');
+
+export const AddReactionSchema = {
+  space_id: SpaceIdSchema,
+  message_id: z
+    .string()
+    .min(1)
+    .describe("Message id (e.g. 'AAAA...') or full resource name."),
+  emoji: EmojiSchema,
+  response_format: ResponseFormatSchema.optional(),
+};
+export type AddReactionInput = {
+  space_id: string;
+  message_id: string;
+  emoji: string;
+  response_format?: "markdown" | "json";
+};
+
+export const RemoveReactionSchema = {
+  space_id: SpaceIdSchema,
+  message_id: z
+    .string()
+    .min(1)
+    .describe("Message id (e.g. 'AAAA...') or full resource name."),
+  emoji: EmojiSchema,
+  response_format: ResponseFormatSchema.optional(),
+};
+export type RemoveReactionInput = {
+  space_id: string;
+  message_id: string;
+  emoji: string;
+  response_format?: "markdown" | "json";
+};
+
+export const ListReactionsSchema = {
+  space_id: SpaceIdSchema,
+  message_id: z
+    .string()
+    .min(1)
+    .describe("Message id (e.g. 'AAAA...') or full resource name."),
+  page_size: z.number().int().min(1).max(1000).optional(),
+  page_token: z.string().optional(),
+  response_format: ResponseFormatSchema.optional(),
+};
+export type ListReactionsInput = {
+  space_id: string;
+  message_id: string;
+  page_size?: number;
+  page_token?: string;
+  response_format?: "markdown" | "json";
+};

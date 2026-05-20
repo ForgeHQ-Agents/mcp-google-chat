@@ -13,6 +13,12 @@ import {
   type GetMessageInput,
   ListMembersSchema,
   type ListMembersInput,
+  AddReactionSchema,
+  type AddReactionInput,
+  RemoveReactionSchema,
+  type RemoveReactionInput,
+  ListReactionsSchema,
+  type ListReactionsInput,
 } from "./schemas.js";
 
 async function main() {
@@ -35,7 +41,7 @@ Environment:
 
   const server = new McpServer({
     name: "google-chat-mcp",
-    version: "1.0.0",
+    version: "1.1.0",
   });
 
   server.registerTool(
@@ -158,6 +164,121 @@ Environment:
             {
               type: "text",
               text: formatters.formatMembersMarkdown(params.space_id, result.members, result.nextPageToken),
+            },
+          ],
+        };
+      } catch (error) {
+        return { content: [{ type: "text", text: client.handleApiError(error) }], isError: true };
+      }
+    },
+  );
+
+  // ============================================================
+  // REACTIONS — write surface (gated by the same allowlist as reads)
+  // ============================================================
+
+  server.registerTool(
+    "google_chat_add_reaction",
+    {
+      title: "Add Emoji Reaction to a Chat Message",
+      description:
+        "React to a Google Chat message with a Unicode emoji (e.g. \"👍\", \"✅\"). Hard-errors if the space is not in this agent's allowlist. Reactions are visible to everyone in the space; use them to acknowledge, classify, or signal status without posting a full message.",
+      inputSchema: AddReactionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async (params: AddReactionInput) => {
+      try {
+        const reaction = await client.addReaction(params.space_id, params.message_id, params.emoji);
+        if (params.response_format === "json") {
+          return { content: [{ type: "text", text: JSON.stringify(reaction, null, 2) }] };
+        }
+        return {
+          content: [
+            { type: "text", text: `Reacted with ${params.emoji} on \`${params.message_id}\`.` },
+          ],
+        };
+      } catch (error) {
+        return { content: [{ type: "text", text: client.handleApiError(error) }], isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "google_chat_remove_reaction",
+    {
+      title: "Remove Bot's Emoji Reaction from a Chat Message",
+      description:
+        "Remove a reaction the bot previously added. Only removes the bot's own reactions; other users' reactions are untouched. Idempotent: if the bot has no matching reaction, this returns success with removed=false.",
+      inputSchema: RemoveReactionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async (params: RemoveReactionInput) => {
+      try {
+        const removed = await client.removeReaction(params.space_id, params.message_id, params.emoji);
+        if (params.response_format === "json") {
+          return { content: [{ type: "text", text: JSON.stringify({ removed }, null, 2) }] };
+        }
+        return {
+          content: [
+            {
+              type: "text",
+              text: removed
+                ? `Removed ${params.emoji} from \`${params.message_id}\`.`
+                : `No ${params.emoji} reaction from the bot was found on \`${params.message_id}\`.`,
+            },
+          ],
+        };
+      } catch (error) {
+        return { content: [{ type: "text", text: client.handleApiError(error) }], isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "google_chat_list_reactions",
+    {
+      title: "List Reactions on a Chat Message",
+      description:
+        "List all emoji reactions on a Google Chat message, grouped by emoji with counts. Useful to check whether the bot has already reacted before adding a duplicate.",
+      inputSchema: ListReactionsSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async (params: ListReactionsInput) => {
+      try {
+        const result = await client.listReactions(
+          params.space_id,
+          params.message_id,
+          params.page_size,
+          params.page_token,
+        );
+        if (params.response_format === "json") {
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        }
+        return {
+          content: [
+            {
+              type: "text",
+              text: formatters.formatReactionsMarkdown(
+                params.space_id,
+                params.message_id,
+                result.reactions,
+                result.nextPageToken,
+              ),
             },
           ],
         };

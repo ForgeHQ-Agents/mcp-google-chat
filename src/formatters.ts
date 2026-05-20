@@ -41,6 +41,29 @@ export function formatMessagesMarkdown(
   return out;
 }
 
+export function formatReactionsMarkdown(
+  spaceId: string,
+  messageId: string,
+  reactions: chat_v1.Schema$Reaction[],
+  nextPageToken?: string,
+): string {
+  if (reactions.length === 0) {
+    return `No reactions on message \`${messageId}\` in ${spaceId}.`;
+  }
+  // Group identical emojis. The API returns one row per (user, emoji) pair.
+  const counts = new Map<string, number>();
+  for (const r of reactions) {
+    const emoji = r.emoji?.unicode ?? r.emoji?.customEmoji?.uid ?? "?";
+    counts.set(emoji, (counts.get(emoji) ?? 0) + 1);
+  }
+  const lines = [`# Reactions on \`${messageId}\``, ""];
+  for (const [emoji, count] of counts.entries()) {
+    lines.push(`- ${emoji} × ${count}`);
+  }
+  if (nextPageToken) lines.push("", `*More reactions available. Use page_token: "${nextPageToken}"*`);
+  return lines.join("\n");
+}
+
 export function formatMembersMarkdown(
   spaceId: string,
   members: chat_v1.Schema$Membership[],

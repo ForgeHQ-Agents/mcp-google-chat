@@ -139,3 +139,112 @@ export async function listMembers(
     nextPageToken: res.data.nextPageToken ?? undefined,
   };
 }
+
+// ============================================================
+// REACTIONS — write surface (gated by the same allowlist as reads)
+// ============================================================
+
+/** Resolves a message_id (short or full resource name) into a canonical name, asserting allowlist. */
+function resolveMessageName(spaceId: string, messageId: string): string {
+  assertSpaceAllowed(spaceId);
+  if (messageId.startsWith("spaces/")) {
+    const match = messageId.match(/^(spaces\/[A-Za-z0-9_-]+)\/messages\/[A-Za-z0-9._-]+$/);
+    if (!match) {
+      throw new Error(
+        `message_id "${messageId}" is malformed. Pass the short id (e.g. "AAAA...") or a full resource name "spaces/<space>/messages/<id>".`,
+      );
+    }
+    const embeddedSpace = match[1];
+    if (embeddedSpace !== spaceId) {
+      throw new Error(
+        `message_id space ("${embeddedSpace}") does not match space_id ("${spaceId}"). Pass a message id that belongs to space_id.`,
+      );
+    }
+    assertSpaceAllowed(embeddedSpace);
+    return messageId;
+  }
+  return `${spaceId}/messages/${messageId}`;
+}
+
+export async function addReaction(
+  spaceId: string,
+  messageId: string,
+  emoji: string,
+): Promise<chat_v1.Schema$Reaction> {
+  const parent = resolveMessageName(spaceId, messageId);
+  const chat = await getChatClient();
+  const res = await chat.spaces.messages.reactions.create({
+    parent,
+    requestBody: { emoji: { unicode: emoji } },
+  });
+  return res.data;
+}
+
+export interface ListReactionsResult {
+  reactions: chat_v1.Schema$Reaction[];
+  nextPageToken?: string;
+}
+
+export async function listReactions(
+  spaceId: string,
+  messageId: string,
+  pageSize?: number,
+  pageToken?: string,
+): Promise<ListReactionsResult> {
+  const parent = resolveMessageName(spaceId, messageId);
+  const chat = await getChatClient();
+  const res = await chat.spaces.messages.reactions.list({
+    parent,
+    pageSize: pageSize ?? 100,
+    pageToken,
+  });
+  return {
+    reactions: res.data.reactions ?? [],
+    nextPageToken: res.data.nextPageToken ?? undefined,
+  };
+}
+
+/**
+ * Remove a reaction the bot previously added. The Chat API only lets you delete
+ * reactions you created, and only by resource name — so we list, find the
+ * matching emoji authored by the calling app, and delete it.
+ *
+ * Returns true if a reaction was removed, false if the bot had no matching
+ * reaction on this message (idempotent semantics).
+ */
+export async function removeReaction(
+  spaceId: string,
+  messageId: string,
+  emoji: string,
+): Promise<boolean> {
+  const parent = resolveMessageName(spaceId, messageId);
+  const chat = await getChatClient();
+
+  // Filter server-side by emoji. We still need to identify the bot's own
+  // reaction (vs another user's same emoji) — the listed reactions include
+  // the `user` field for the reactor; for app-authored reactions this is
+  // the Chat App itself, so any reaction we created matches our identity.
+  // The API only permits deleting your own reactions, so a 403 on delete
+  // is the failure mode if the matched reaction wasn't ours.
+  let pageToken: string | undefined;
+  do {
+    const res = await chat.spaces.messages.reactions.list({
+      parent,
+      filter: `emoji.unicode = "${emoji.replace(/"/g, '\\"')}"`,
+      pageSize: 100,
+      pageToken,
+    });
+    for (const r of res.data.reactions ?? []) {
+      if (!r.name) continue;
+      try {
+        await chat.spaces.messages.reactions.delete({ name: r.name });
+        return true;
+      } catch {
+        // Not ours — keep looking through the page.
+        continue;
+      }
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return false;
+}
